@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.egg-link
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+*.executed.ipynb
+
+# HuggingFace / ML caches
+.cache/
+*.cache/
+huggingface/
+~/.cache/huggingface/
+
+# Model checkpoints (keep adapters, exclude full checkpoints)
+artifacts/lora_run/
+artifacts/qlora_run/
+artifacts/runs/
+
+# Large binaries / model weights (only commit adapter files < 200MB)
+*.bin
+*.safetensors.tmp
+
+# Logs and temp
+*.log
+/tmp/
+*.tmp
+*.bak
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Claude internal
+.claude/
+
+# uv / pip
+uv.lock
+pip-selfcheck.json
