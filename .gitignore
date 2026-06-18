@@ -33,8 +33,9 @@ artifacts/lora_run/
 artifacts/qlora_run/
 artifacts/runs/
 
-# Large binaries / model weights (only commit adapter files < 200MB)
+# Large binaries / model weights (weights exceed GitHub 100 MB limit — run notebook to reproduce)
 *.bin
+*.safetensors
 *.safetensors.tmp
 
 # Logs and temp

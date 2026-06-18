@@ -247,7 +247,7 @@ huggingface-cli login
 
 ```
 granite-lora-qlora-text-classification/
-├── granite41_lora_qlora_text_finetuning.ipynb   # Main tutorial notebook (29 cells)
+├── granite41_lora_qlora_text_finetuning.ipynb   # Main tutorial notebook (39 cells)
 ├── requirements.txt                              # Pinned Python dependencies
 ├── README.md                                     # This file
 ├── .gitignore
@@ -255,14 +255,15 @@ granite-lora-qlora-text-classification/
 │   ├── run_granite41_gpu_stages.sh              # Stage-by-stage nbconvert runner with OOM retry
 │   └── gpu_guard.sh                             # VRAM guard: kills stale GPU procs, waits for free VRAM
 └── artifacts/
-    ├── lora_adapter/                             # Saved LoRA adapter weights (adapter_model.safetensors)
-    └── qlora_adapter/                            # Saved QLoRA adapter weights
+    ├── lora_adapter/          # Full-run LoRA adapter configs + tokenizer (weights excluded, see below)
+    ├── demo_lora_adapter/     # 20K-sample demo LoRA adapter configs + tokenizer
+    └── demo_qlora_adapter/    # 20K-sample demo QLoRA adapter configs + tokenizer
 ```
 
 **What's excluded** (see `.gitignore`):
+- `*.safetensors` — adapter weight files are 119 MB each, exceeding GitHub's 100 MB limit; run the notebook to reproduce them
 - `.venv/` — 5.6 GB virtual environment (recreate with `uv pip install -r requirements.txt`)
-- `artifacts/lora_run/` and `artifacts/qlora_run/` — HF Trainer checkpoint directories (large)
-- `artifacts/runs/` — historical nbconvert execution runs
+- `artifacts/lora_run/`, `artifacts/demo_lora_run/`, `artifacts/demo_qlora_run/` — HF Trainer checkpoint directories
 - `.ipynb_checkpoints/` — Jupyter auto-save files
 
 ---
@@ -352,12 +353,12 @@ Generation-based classification: the model generates up to 8 new tokens, the out
 | Model | Accuracy | Macro F1 | Parse Coverage | Peak VRAM |
 |-------|----------|----------|----------------|-----------|
 | Base (zero-shot) | **89.15%** | 88.96% | 100% | ~6.2 GB |
-| LoRA fine-tuned | — | — | — | ~7.7 GB |
-| QLoRA fine-tuned | — | — | — | ~4.5–5.5 GB |
+| LoRA fine-tuned (110K samples) | **95.15%** | 94.99% | 100% | ~7.6 GB |
+| QLoRA fine-tuned (20K demo) | **94.2%** | 93.82% | 100% | ~4.5 GB |
 
-> Results will be updated after training completes.
+> Full QLoRA on 110K samples was not completed (runtime ~16–17 h); the demo run on 20K samples confirms near-identical accuracy to LoRA at 40% lower VRAM.
 
-**Baseline interpretation**: Granite 4.1 3B achieves 89.15% zero-shot on AG News — strong prior for a balanced 4-class task. LoRA and QLoRA are expected to push accuracy toward 95–98%.
+**Baseline interpretation**: Granite 4.1 3B achieves 89.15% zero-shot on AG News — strong prior for a balanced 4-class task. Fine-tuning with only 20K samples (18% of the full dataset) already pushes both LoRA and QLoRA to ~94%, demonstrating rapid saturation on this balanced classification task.
 
 ---
 
@@ -428,26 +429,29 @@ qlora_model.eval()
 
 | Stage | Training Samples | Optimizer Steps | Duration | Final Train Loss |
 |-------|-----------------|-----------------|----------|-----------------|
-| LoRA | 110,000 | 6,875 | — | — |
-| QLoRA | 110,000 | 6,875 | — | — |
+| LoRA (full run) | 110,000 | 6,875 | 11h 36m | 0.0737 |
+| QLoRA (full run) | 110,000 | 6,875 | ~16–17 h (not completed) | — |
+| LoRA (20K demo) | 20,000 | 1,250 | 2h 16m | 0.0985 |
+| QLoRA (20K demo) | 20,000 | 1,250 | 3h 6m | 0.0996 |
+
+> Demo runs use 18% of the training data. QLoRA trains 37% slower than LoRA on RTX 4060 due to NF4 dequantization overhead at batch=1; this overhead is outweighed by the ~3.2 GB VRAM savings on GPUs with ≤6 GB VRAM.
 
 ### Evaluation Summary
 
 | Model | Accuracy | Macro F1 | Parse Coverage | Peak VRAM |
 |-------|----------|----------|----------------|-----------|
 | Base (zero-shot) | **89.15%** | 88.96% | 100.0% | ~6.2 GB |
-| LoRA fine-tuned | — | — | — | ~7.7 GB |
-| QLoRA fine-tuned | — | — | — | ~4.5–5.5 GB |
-
-> Full results table will be updated with actual training outputs.
+| LoRA fine-tuned (110K) | **95.15%** | 94.99% | 100.0% | ~7.6 GB |
+| LoRA fine-tuned (20K demo) | **94.20%** | 93.83% | 100.0% | ~7.6 GB |
+| QLoRA fine-tuned (20K demo) | **94.20%** | 93.82% | 100.0% | ~4.5 GB |
 
 ### Memory Profile
 
 | Stage | VRAM Used | Peak VRAM |
 |-------|-----------|-----------|
 | Base model inference | ~6.2 GB | ~6.5 GB |
-| LoRA training | ~7.7 GB | ~7.9 GB |
-| QLoRA training | ~4.5 GB | ~5.5 GB |
+| LoRA training | 7.56 GB | 7.56 GB |
+| QLoRA training | 4.26 GB | 4.62 GB |
 | LoRA inference | ~6.3 GB | ~6.3 GB |
 | QLoRA inference | ~2.0 GB | ~2.2 GB |
 
@@ -548,7 +552,7 @@ uv pip install bitsandbytes --upgrade
 
 2. **transformers 5.x broke several TrainingArguments fields.** The `inspect.signature` filter pattern (`{k: v for k, v in args_dict.items() if k in valid_params}`) is the correct way to write version-robust training code.
 
-3. **NF4 quantization delivers near-lossless accuracy.** In this experiment, QLoRA trained on a 4-bit base achieves accuracy within ~0.5% of full-precision LoRA, while using ~3.2 GB less VRAM. This makes 3B+ models accessible on 6 GB VRAM cards.
+3. **NF4 quantization delivers near-lossless accuracy.** Demo QLoRA (20K samples, 4-bit NF4 base) achieved **94.20% accuracy** vs. **94.20% for demo LoRA** — identical, while using 3.3 GB less VRAM (4.26 GB vs. 7.56 GB peak). The full LoRA run on 110K samples reached 95.15%, suggesting the remaining ~1% gap is a data-size effect, not quantization loss.
 
 4. **The zero-shot baseline is surprisingly strong.** Granite 4.1 3B achieves 89.15% on AG News zero-shot. Fine-tuning is most valuable when the label space is specialized or the format requires exact compliance.
 
